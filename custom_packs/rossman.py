@@ -8,38 +8,62 @@ import datetime
 class Rossmann( object ):
     def __init__( self ):
         self.home_path='' 
-        self.tool_encoder_store_type                = pickle.load( open( self.home_path + 'exports/cicle_products/tool_encoder_store_type.pkl', 'rb') )
-        self.tool_scaler_competition_distance       = pickle.load( open( self.home_path + 'exports/cicle_products/tool_scaler_competition_distance.pkl', 'rb') )
-        self.tool_scaler_competition_time_month     = pickle.load( open( self.home_path + 'exports/cicle_products/tool_scaler_competition_time_month.pkl', 'rb') )
-        self.tool_scaler_promo_time_week            = pickle.load( open( self.home_path + 'exports/cicle_products/tool_scaler_promo_time_week.pkl', 'rb') )
-        self.tool_scaler_year                       = pickle.load( open( self.home_path + 'exports/cicle_products/tool_scaler_year.pkl', 'rb') )
+        self.rs_competition_distance     = pickle.load(open( self.home_path +  'exports/cicle_products/rs_competition_distance.pkl', 'rb'))
+        self.rs_competition_time_month   = pickle.load(open( self.home_path +  'exports/cicle_products/rs_competition_time_month.pkl', 'rb'))
+        self.mms_promo_time_week         = pickle.load(open( self.home_path +  'exports/cicle_products/mms_promo_time_week.pkl', 'rb'))
+        self.mms_year                    = pickle.load(open( self.home_path +  'exports/cicle_products/mms_year.pkl', 'rb'))
+        self.le_store_type               = pickle.load(open( self.home_path +  'exports/cicle_products/le_store_type.pkl', 'rb'))
+        self.ohe_state_holiday           = pickle.load(open( self.home_path +  'exports/cicle_products/ohe_state_holiday.pkl', 'rb'))
 
-    def data_cleaning( self, df_01 ):
-        # 1.1. Renomear colunas
+    def apply_ohe(self, encoder ,encoded_array, variable_name, df):
+        '''
+        Aplica o One Hot Encoder no dataframe, criando as colunas respectivas às categorias no encoder e elimininado a coluna original.
 
-        cols_old = ['Store', 'DayOfWeek', 'Date', 'Open', 'Promo', 'StateHoliday', 'SchoolHoliday', 
-                    'StoreType', 'Assortment', 'CompetitionDistance', 'CompetitionOpenSinceMonth',
-                    'CompetitionOpenSinceYear', 'Promo2', 'Promo2SinceWeek', 'Promo2SinceYear', 'PromoInterval']
+        Parâmetros:
+            encoder (OneHotEncoder): Encoder OneHotEncoder do Scikit-learn pré-configurado.
+            encoded_array (ndarray): Array gerado pelo OneHotEncoder.
+            variable_name (str): Nome da variável original.
+            df (DataFrame): Dataframe a ser alterado.
+
+        Retorna:
+            Um novo dataframe com as novas colunas respectivas às categorias no encoder e sem a coluna original.
+        '''
+
+        # Criar DataFrame com nomes corretos
+        encoded_df = pd.DataFrame(
+            encoded_array,
+            columns=encoder.get_feature_names_out([variable_name]),
+            index=df.index
+        )
+
+        # Concatenar com o DataFrame original, removendo a coluna original
+        df_f = pd.concat([df.drop(columns=[variable_name]), encoded_df], axis=1)
+
+        return df_f
+
+    def apply_01 (self, df):
+        df_01 = df.copy()
+
+        # Renomeando colunas:
+        cols_old = ['Id', 'Store', 'DayOfWeek', 'Date', 'Open', 'Promo', 'StateHoliday',
+                    'SchoolHoliday', 'StoreType', 'Assortment', 'CompetitionDistance',
+                    'CompetitionOpenSinceMonth', 'CompetitionOpenSinceYear', 'Promo2',
+                    'Promo2SinceWeek', 'Promo2SinceYear', 'PromoInterval']
 
         snakecase = lambda x: inflection.underscore( x )
 
         cols_new = list( map( snakecase, cols_old ) )
 
-        # Renomeando colunas:
         df_01.columns = cols_new
 
-
-
-        # 1.3. Tipagem dos dados - Primeira iteração
 
         # Transformando variável 'date' em datetime:
         df_01['date'] = pd.to_datetime( df_01['date'] )
 
 
+        # Preenchendo dados vazios
 
-        # 1.5. Preenchendo dados vazios
-
-        #competition_distance - Transforma os Nan em 200000 (muito maior do que a maior distância no banco de dados):     
+        #competition_distance - Transforma os Nan em 200000 (muito maior do que a maior distância máxima no banco de dados):     
         df_01['competition_distance'] = df_01['competition_distance'].apply( lambda x: 200000.0 if math.isnan( x ) else x )
 
         #competition_open_since_month - Caso seja NA, extrai o mês da coluna 'date':
@@ -61,11 +85,16 @@ class Rossmann( object ):
 
         df_01['month_map'] = df_01['date'].dt.month.map( month_map ) # Extrai o mês de 'date' e transforama em letras conforme o mapa
 
-        df_01['is_promo'] = df_01[['promo_interval', 'month_map']].apply( lambda x: 0 if x['promo_interval'] == 0 else 1 if x['month_map'] in x['promo_interval'].split( ',' ) else 0, axis=1 ) # Checa se o mês de 'month_map' está contido nos meses de 'promo_interval' e se estiver muda para 1 o valor de 'is_promo' indicando que está no período de promoção
+        # Checa se o mês de 'month_map' está contido nos meses de 'promo_interval' e se estiver muda para 1 o valor de 'is_promo' indicando que está no período de promoção
+        df_01['is_promo'] = df_01[['promo_interval', 'month_map']].apply(
+                                                                        lambda x: 
+                                                                        0 if x['promo_interval'] == 0 
+                                                                        else 1 if x['month_map'] in x['promo_interval'].split( ',' ) 
+                                                                        else 0, axis=1 
+                                                                        )
 
 
-
-        # 1.6. Tipagem dos dados - Segunda iteração
+        # Alterando tipagem de dados
 
         # competiton
         df_01['competition_open_since_month'] = df_01['competition_open_since_month'].astype( int )
@@ -75,14 +104,13 @@ class Rossmann( object ):
         df_01['promo2_since_week'] = df_01['promo2_since_week'].astype( int )
         df_01['promo2_since_year'] = df_01['promo2_since_year'].astype( int )
 
-        return df_01 
+        return df_01
 
-    def feature_engineering( self, df_02 ):
+    def apply_02 (self, df):
+        df_02 = df.copy()
 
-        # 2.0 Feature engineering
+        # Criando variáveis derivadas
 
-        ## 2.4. Criando variáveis derivadas
-        
         # year - Nova coluna apenas com o ano da coluna 'date'
         df_02['year'] = df_02['date'].dt.year
         df_02['year'] = np.int64(df_02['year'])
@@ -102,11 +130,11 @@ class Rossmann( object ):
         # year week - Nova coluna apenas com semana do ano e o ano da coluna 'date'
         df_02['year_week'] = df_02['date'].dt.strftime( '%Y-%W' )
 
-        # competition since
+        # competition since - Converte 'competition_open_since_year' e 'competition_open_since_month' em uma variável com o tempo de existência do concorrente em meses. 
         df_02['competition_since'] = df_02.apply( lambda x: datetime.datetime( year=x['competition_open_since_year'], month=x['competition_open_since_month'],day=1 ), axis=1 )
         df_02['competition_time_month'] = ( ( df_02['date'] - df_02['competition_since'] )/30 ).apply( lambda x: x.days ).astype( int )
 
-        # promo since
+        # promo since - Converte 'promo2_since_year' e 'promo2_since_week' em uma variável com o tempo de promoção em semanas. 
         df_02['promo_since'] = df_02['promo2_since_year'].astype( str ) + '-' + df_02['promo2_since_week'].astype( str )
         df_02['promo_since'] = df_02['promo_since'].apply( lambda x: datetime.datetime.strptime( x + '-1', '%Y-%W-%w' ) - datetime.timedelta( days=7 ) )
         df_02['promo_time_week'] = ( ( df_02['date'] - df_02['promo_since'] )/7 ).apply( lambda x: x.days ).astype( int )
@@ -119,63 +147,56 @@ class Rossmann( object ):
 
         return df_02
 
-    def filtering_to_business( self, df_03 ):
-
-        # 3.0 Filtragem de variáveis para o negócio
-
-        ## 3.1. Filtragem de linhas
+    def apply_03 (self, df):
+        df_03 = df.copy()
 
         # Filtrando linhas apenas para dias em que houve vendas:
         df_03 = df_03[(df_03['open'] != 0)]
 
 
-
-        ## 3.2. Seleção de colunas
-
-        # Removendo colunas utilizadas como referência na etapa de feature engeneering:
-        cols_drop = ['open', 'promo_interval', 'month_map']
+        # Removendo colunas:
+        cols_drop = ['open', 'competition_open_since_year', 'competition_open_since_month', 'promo2_since_year', 'promo2_since_week', 'promo_interval', 'month_map']
         df_03 = df_03.drop( cols_drop, axis=1 )
 
         return df_03
 
-    def data_preparation( self, df_05 ):
-        # 5.0. Prepararação dos dados
+    def apply_05(self, df):
+        df_05 = df.copy()
 
-        ## 5.2. Rescaling
+        # Normalização - Não há dados
 
-        # competition distance
-        df_05['competition_distance'] = self.tool_scaler_competition_distance.transform( df_05[['competition_distance']].values ) # Com tratamento de outliers
 
-        # competition time month
-        df_05['competition_time_month'] = self.tool_scaler_competition_time_month.transform( df_05[['competition_time_month']].values ) # Com tratamento de outliers
+        # Rescaling
 
-        # promo time week
-        df_05['promo_time_week'] = self.tool_scaler_promo_time_week.transform( df_05[['promo_time_week']].values ) # Sem tratamento de outliers
+        # competition_distance
+        df_05['competition_distance'] = self.rs_competition_distance.transform( df_05[['competition_distance']].values )
+
+        # competition_time_month
+        df_05['competition_time_month'] = self.rs_competition_time_month.transform( df_05[['competition_time_month']].values )
+
+        # promo_time_week
+        df_05['promo_time_week'] = self.mms_promo_time_week.transform( df_05[['promo_time_week']].values )
 
         # year
-        df_05['year'] = self.tool_scaler_year.transform( df_05[['year']].values ) # Sem tratamento de outliers
+        df_05['year'] = self.mms_year.transform( df_05[['year']].values )
 
 
-
-        ## 5.3. Transformação
-
-        ### 5.3.1. Encoding
+        # Encoding
 
         # state_holiday - One Hot Encoding
-        df_05 = pd.get_dummies( df_05, prefix=['state_holiday'], columns=['state_holiday'] )
+        encoded_array = self.ohe_state_holiday.transform(df_05[['state_holiday']])
+        df_05 = self.apply_ohe(self.ohe_state_holiday, encoded_array, 'state_holiday', df_05)
 
         # store_type - Label Encoding
-        df_05['store_type'] = self.tool_encoder_store_type.transform( df_05['store_type'] )
+        df_05['store_type'] = self.le_store_type.transform( df_05[['store_type']].values )
 
         # assortment - Ordinal Encoding
         assortment_dict = {'basic': 1,  'extra': 2, 'extended': 3}
         df_05['assortment'] = df_05['assortment'].map( assortment_dict )
 
 
+        # Transformação de natureza (encoder cíclico)
 
-        ### 5.3.2. Transformação da variável resposta
-
-        ### 5.3.3. Transformação de natureza (encoder cíclico)
         # day of week
         df_05['day_of_week_sin'] = df_05['day_of_week'].apply( lambda x: np.sin( x * ( 2. * np.pi/7 ) ) )
         df_05['day_of_week_cos'] = df_05['day_of_week'].apply( lambda x: np.cos( x * ( 2. * np.pi/7 ) ) )
@@ -193,45 +214,57 @@ class Rossmann( object ):
         df_05['week_of_year_cos'] = df_05['week_of_year'].apply( lambda x: np.cos( x * ( 2. * np.pi/52 ) ) )
 
 
+        # Descartando colunas antigas
 
-        ## 5.4. Descartando colunas antigas
         cols_drop = ['week_of_year', 'day', 'month', 'day_of_week', 'promo_since', 'competition_since', 'year_week' ]
         df_05 = df_05.drop( cols_drop, axis=1 )
 
         return df_05
 
-    def feature_selection( self, df_06 ):
+    def apply_06 (self, df):
+        df_06 = df.copy()
 
-        cols_selected = ['store',
-                        'promo',
-                        'store_type',
-                        'assortment',
-                        'competition_distance',
-                        'competition_open_since_month',
-                        'competition_open_since_year',
-                        'promo2',
-                        'promo2_since_week',
-                        'promo2_since_year',
-                        'competition_time_month',
-                        'promo_time_week',
-                        'day_of_week_sin',
-                        'day_of_week_cos',
-                        'month_sin',
-                        'month_cos',
-                        'day_sin',
-                        'day_cos',
-                        'week_of_year_sin',
-                        'week_of_year_cos'
-                        ]
-        
-        return df_06[cols_selected]
+        cols_selected_boruta = [
+                                'id', # Para manter o registro, será descartada antes da aplicação do modelo
+                                'store',
+                                'promo',
+                                'store_type',
+                                'assortment',
+                                'competition_distance',
+                                'promo2',
+                                'competition_time_month',
+                                'promo_time_week',
+                                'day_of_week_sin',
+                                'day_of_week_cos',
+                                'month_sin',
+                                'month_cos',
+                                'day_sin',
+                                'day_cos'
+                                ]
+
+        df_06 = df_06[ cols_selected_boruta ]
+
+        return df_06
 
     def get_prediction( self, model, original_data, test_data ):
-        # prediction
-        pred = model.predict( test_data )
-        
-        # join pred into the original data
-        original_data['prediction'] = np.expm1( pred )
+
+        # Gerando previsões (sem a coluna de id)
+        pred = model.predict(test_data.drop(['id'], axis=1))
+
+
+        # Anexando previsões ao dataframe de teste
+        test_data['predictions'] = np.expm1( pred )
+
+
+        # Anexando previsões ao dataframe original
+
+        # Procurando previsões em test_data e aplicando em original_data com base no id
+        pred_map = test_data.set_index('id')['predictions']
+        original_data['predictions'] = original_data['Id'].map(pred_map)
+
+        # Preenchendo previsões faltantes com zeros
+        original_data['predictions'] = original_data['predictions'].fillna(0)
+
         
         return original_data.to_json( orient='records', date_format='iso' )
     

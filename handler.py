@@ -25,14 +25,14 @@ def rossmann_predict():
         pipeline = Rossmann()
         
         # data wrangling
-        df1 = pipeline.data_cleaning( test_raw )
-        df2 = pipeline.feature_engineering( df1 )
-        df3 = pipeline.filtering_to_business( df2 )
-        df4 = pipeline.data_preparation( df3 )
-        df5 = pipeline.feature_selection( df4 )
+        df = pipeline.apply_01(test_raw)
+        df = pipeline.apply_02(df)
+        df = pipeline.apply_03(df)
+        df = pipeline.apply_05(df)
+        df = pipeline.apply_06(df)
 
         # prediction
-        df_response = pipeline.get_prediction( model, test_raw, df5 )
+        df_response = pipeline.get_prediction( model, test_raw, df )
 
         return df_response
           
