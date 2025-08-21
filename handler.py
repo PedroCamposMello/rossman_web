@@ -5,7 +5,7 @@ from flask             import Flask, request, Response
 from custom_packs.rossman      import Rossmann
 
 # loading model
-model = pickle.load( open( 'exports/cicle_products/model_xgb_tuned.pkl', 'rb') )
+model = pickle.load( open( 'exports/cicle_products/model_xgb.pkl', 'rb') )
 
 # initialize API
 app = Flask( __name__ )
